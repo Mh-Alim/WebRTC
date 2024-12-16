@@ -6,19 +6,50 @@ let senderSocket: WebSocket | null = null;
 let receiverSocket: WebSocket | null = null;
 wss.on("connection", (ws) => {
   console.log("socket connected");
-
+  // Catching the "close" event
+  ws.on("close", () => {
+    console.log("socket disconnected");
+    // You can also perform additional cleanup here if needed
+    if (ws === senderSocket) {
+      console.log("Sender socket disconnected");
+      senderSocket = null; // Reset senderSocket to null or handle cleanup
+    }
+    if (ws === receiverSocket) {
+      console.log("Receiver socket disconnected");
+      receiverSocket = null; // Reset receiverSocket to null or handle cleanup
+    }
+  });
   ws.on("message", (data: any) => {
-    if (data.type === "sender") return (senderSocket = ws);
-    if (data.type === "receiver") return (receiverSocket = ws);
+    console.log("typeof", typeof data);
+    const message: { type: string; sdp: any; candidate: any } =
+      JSON.parse(data);
+    if (message.type === "sender") return (senderSocket = ws);
+    if (message.type === "receiver") return (receiverSocket = ws);
 
-    if (data.type === "offer") {
+    if (message.type === "offer") {
       if (ws !== senderSocket) return;
-      return receiverSocket?.send(data);
+      console.log("offer");
+      return receiverSocket?.send(JSON.stringify(message));
     }
 
-    if (data.type === "answer") {
+    if (message.type === "answer") {
+      console.log("answer");
       if (ws !== receiverSocket) return;
-      return senderSocket?.send(data);
+      return senderSocket?.send(JSON.stringify(message));
+    }
+
+    if (message.type === "iceCandidate") {
+      console.log("ice candidate");
+      if (ws === senderSocket) {
+        return receiverSocket?.send(
+          JSON.stringify({ type: "iceCandidate", candidate: message.candidate })
+        );
+      }
+      if (ws === receiverSocket) {
+        return senderSocket?.send(
+          JSON.stringify({ type: "iceCandidate", candidate: message.candidate })
+        );
+      }
     }
   });
 });
